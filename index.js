@@ -23,6 +23,7 @@ async function run() {
     await client.connect();
     const database = client.db("mentorify");
     const usersCollection = database.collection("users");
+    const NewTutors = database.collection("NewTutors");
     // all tutors
     app.get("/tutors", async (req, res) => {
       const cursor = usersCollection.find({});
@@ -42,6 +43,20 @@ async function run() {
       const cursor = usersCollection.find({}).limit(6);
       const tutors = await cursor.toArray();
       res.send(tutors);
+    });
+
+    // add new tutor
+    app.post("/tutors/newTutors", async (req, res) => {
+      const tutor = req.body;
+
+      const result = await NewTutors.insertOne({ ...tutor });
+
+      if (tutor._id) {
+        delete tutor._id;
+      }
+
+      const result2 = await usersCollection.insertOne(tutor);
+      res.send({ result, result2 });
     });
 
     await client.db("admin").command({ ping: 1 });
