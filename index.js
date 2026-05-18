@@ -23,7 +23,8 @@ async function run() {
     await client.connect();
     const database = client.db("mentorify");
     const usersCollection = database.collection("users");
-    const NewTutors = database.collection("NewTutors");
+    const bookedSessionsCollection = database.collection("bookedSessions");
+
     // all tutors
     app.get("/tutors", async (req, res) => {
       const cursor = usersCollection.find({});
@@ -38,32 +39,53 @@ async function run() {
       res.send(result);
     });
 
+    // my tutors
+
+    app.get("/my-tutors", async (req, res) => {
+      const email = req.query.email;
+      const query = { createdBy: email };
+      const cursor = usersCollection.find(query);
+      const myTutors = await cursor.toArray();
+      res.send(myTutors);
+    });
+
     // book sessions details
-    app.get("/tutors/:id",  async (req, res) => {
+    app.get("/tutors/:id", async (req, res) => {
       const id = req.params.id;
       const result = await usersCollection.findOne({ _id: new ObjectId(id) });
       res.send(result);
     });
 
     // limited tutors
-    app.get("/tutors/limited", async (req, res) => {
-      const cursor = usersCollection.find({}).limit(6);
+    app.get("/limited-tutors", async (req, res) => {
+      const cursor = usersCollection.find({}).sort({ _id: -1 }).limit(6);
       const tutors = await cursor.toArray();
       res.send(tutors);
     });
 
-    // add new tutor
-    app.post("/tutors/newTutors", async (req, res) => {
-      const tutor = req.body;
+    // booked seassion
+    app.post("/my-booked-sessions", async (req, res) => {
+      const session = req.body;
+      session.status = "Confirmed";
+      const result = await bookedSessionsCollection.insertOne(session);
+      res.send(result);
+    });
+    // session delete
+    app.patch("/my-booked-sessions/:id", async (req, res) => {
+      const id = req.params.id;
+      const result = await bookedSessionsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { status: "Cancelled" } },
+      );
+      res.send(result);
+    });
 
-      const result = await NewTutors.insertOne({ ...tutor });
-
-      if (tutor._id) {
-        delete tutor._id;
-      }
-
-      const result2 = await usersCollection.insertOne(tutor);
-      res.send({ result, result2 });
+    // get mybooking session
+    app.get("/my-booked-sessions", async (req, res) => {
+      const email = req.query.email;
+      const cursor = bookedSessionsCollection.find({ email: email });
+      const sessions = await cursor.toArray();
+      res.send(sessions);
     });
 
     await client.db("admin").command({ ping: 1 });
