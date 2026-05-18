@@ -1,6 +1,6 @@
 const express = require("express");
 const dotenv = require("dotenv");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 dotenv.config();
 const app = express();
 const uri = process.env.MONGO_URI;
@@ -35,6 +35,13 @@ async function run() {
     app.post("/tutors", async (req, res) => {
       const tutor = req.body;
       const result = await usersCollection.insertOne(tutor);
+      res.send(result);
+    });
+
+    // book sessions details
+    app.get("/tutors/:id",  async (req, res) => {
+      const id = req.params.id;
+      const result = await usersCollection.findOne({ _id: new ObjectId(id) });
       res.send(result);
     });
 
