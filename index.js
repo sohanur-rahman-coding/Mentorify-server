@@ -55,6 +55,13 @@ async function run() {
       const result = await usersCollection.findOne({ _id: new ObjectId(id) });
       res.send(result);
     });
+      // delete tutors 
+    app.delete("/tutors/:id", async (req, res) => {
+      const id = req.params.id;
+      const result = await usersCollection.deleteOne({ _id: new ObjectId(id) });
+      res.send(result);
+    });
+
 
     // limited tutors
     app.get("/limited-tutors", async (req, res) => {
@@ -88,6 +95,7 @@ async function run() {
       res.send(sessions);
     });
 
+  
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
