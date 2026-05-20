@@ -1,3 +1,5 @@
+const dns = require("node:dns");
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
 const express = require("express");
 const dotenv = require("dotenv");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
@@ -5,6 +7,7 @@ dotenv.config();
 const app = express();
 const uri = process.env.MONGO_URI;
 const cors = require("cors");
+const { createRemoteJWKSet, jwtVerify } = require("jose-cjs");
 app.use(cors());
 app.use(express.json());
 
@@ -17,6 +20,28 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
+
+const JWKS = createRemoteJWKSet(
+  new URL(`${process.env.ISSUER_URL}/api/auth/jwks`),
+);
+const verifyToken = async (req, res, next) => {
+  const header = req.headers.authorization;
+  if (!header) {
+    return res.status(401).send({ message: "Unauthorized" });
+  }
+  const token = header.split(" ")[1];
+  if (!token) {
+    return res.status(403).send({ message: "Forbidden" });
+  }
+  try {
+    const { payload } = await jwtVerify(token, JWKS);
+    req.user = payload;
+
+    next();
+  } catch (error) {
+    return res.status(403).send({ message: "Forbidden" });
+  }
+};
 
 async function run() {
   try {
@@ -33,7 +58,7 @@ async function run() {
     });
 
     // add tutors
-    app.post("/tutors", async (req, res) => {
+    app.post("/tutors", verifyToken, async (req, res) => {
       const tutor = req.body;
       const result = await usersCollection.insertOne(tutor);
       res.send(result);
@@ -41,7 +66,7 @@ async function run() {
 
     // my tutors
 
-    app.get("/my-tutors", async (req, res) => {
+    app.get("/my-tutors", verifyToken, async (req, res) => {
       const email = req.query.email;
       const query = { createdBy: email };
       const cursor = usersCollection.find(query);
@@ -68,7 +93,7 @@ async function run() {
     });
 
     // book sessions details
-    app.get("/tutors/:id", async (req, res) => {
+    app.get("/tutors/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const result = await usersCollection.findOne({ _id: new ObjectId(id) });
       res.send(result);
@@ -76,17 +101,82 @@ async function run() {
 
     // limited tutors
     app.get("/limited-tutors", async (req, res) => {
-      const cursor = usersCollection.find({}).sort({ _id: -1 }).limit(6);
+      const cursor = usersCollection.find({}).limit(6);
       const tutors = await cursor.toArray();
       res.send(tutors);
     });
 
-    // booked seassion
+    // book session modal data here,,,
     app.post("/my-booked-sessions", async (req, res) => {
       const session = req.body;
-      session.status = "Confirmed";
-      const result = await bookedSessionsCollection.insertOne(session);
-      res.send(result);
+
+      const tutorId = session.tutorId;
+
+      if (!tutorId) {
+        return res.status(400).send({ message: "Tutor ID is required" });
+      }
+
+      try {
+        const tutor = await usersCollection.findOne({
+          _id: new ObjectId(tutorId),
+        });
+
+        if (!tutor) {
+          return res.status(404).send({ message: "Tutor not found" });
+        }
+
+        const currentDate = new Date();
+        const sessionStartDate = new Date(tutor.sessionStartDate);
+
+        if (currentDate >= sessionStartDate) {
+          return res.status(400).send({
+            message: "This session has already started. Booking is now closed.",
+          });
+        }
+
+        const slotsLeft = parseInt(tutor.totalSlot) || 0;
+        if (slotsLeft <= 0) {
+          return res.status(400).send({
+            message: "Enrollment capacity has been reached for this tutor.",
+          });
+        }
+
+        session.status = "Confirmed";
+        session.bookedAt = new Date();
+        const bookingResult = await bookedSessionsCollection.insertOne(session);
+
+        const updatedResult = await usersCollection.findOneAndUpdate(
+          { _id: new ObjectId(tutorId) },
+          [
+            {
+              $set: {
+                totalSlot: {
+                  $subtract: [{ $toInt: "$totalSlot" }, 1],
+                },
+              },
+            },
+          ],
+          { returnDocument: "after" },
+        );
+
+        const updatedTutorDoc = updatedResult.value || updatedResult;
+
+        if (updatedTutorDoc && updatedTutorDoc.totalSlot === 0) {
+          return res.send({
+            success: true,
+            bookingResult,
+            message: "Booking Confirmed! This session is now fully booked.",
+          });
+        }
+
+        res.send({
+          success: true,
+          bookingResult,
+          message: "Booking Confirmed Successfully!",
+        });
+      } catch (error) {
+        res.status(500).send({ message: "Internal server error" });
+      }
     });
     // session delete
     app.patch("/my-booked-sessions/:id", async (req, res) => {
@@ -99,14 +189,14 @@ async function run() {
     });
 
     // get mybooking session
-    app.get("/my-booked-sessions", async (req, res) => {
+    app.get("/my-booked-sessions", verifyToken, async (req, res) => {
       const email = req.query.email;
       const cursor = bookedSessionsCollection.find({ email: email });
       const sessions = await cursor.toArray();
       res.send(sessions);
     });
 
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
     );
