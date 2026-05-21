@@ -45,39 +45,41 @@ const verifyToken = async (req, res, next) => {
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
     const database = client.db("mentorify");
     const usersCollection = database.collection("users");
     const bookedSessionsCollection = database.collection("bookedSessions");
 
     // all tutors
     app.get("/tutors", async (req, res) => {
-      const { search } = req.query;
-      let cursor;
+      const { search, startDate, endDate } = req.query;
+      let query = {};
+
       if (search) {
-        cursor = usersCollection.find({
-          $or: [
-            {
-              name: {
-                $regex: search,
-                $options: "i",
-              },
-            },
-            {
-              subject: {
-                $regex: search,
-                $options: "i",
-              },
-            },
-          ],
-        });
-      } else {
-        cursor = usersCollection.find({});
+        query.$or = [
+          { tutorName: { $regex: search, $options: "i" } },
+          { category: { $regex: search, $options: "i" } },
+        ];
       }
 
-      const tutors = await cursor.toArray();
-      res.send(tutors);
+      if (startDate || endDate) {
+        query.sessionStartDate = {};
+        if (startDate) {
+          query.sessionStartDate.$gte = startDate; // e.g., "2026-05-01"
+        }
+        if (endDate) {
+          query.sessionStartDate.$lte = endDate; // e.g., "2026-07-31"
+        }
+      }
+
+      try {
+        const tutors = await usersCollection.find(query).toArray();
+        res.send(tutors);
+      } catch (error) {
+        res.status(500).send({ message: "Internal server error" });
+      }
     });
+
 
     // add tutors
     app.post("/tutors", verifyToken, async (req, res) => {
