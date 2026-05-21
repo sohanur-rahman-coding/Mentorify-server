@@ -52,7 +52,29 @@ async function run() {
 
     // all tutors
     app.get("/tutors", async (req, res) => {
-      const cursor = usersCollection.find({});
+      const { search } = req.query;
+      let cursor;
+      if (search) {
+        cursor = usersCollection.find({
+          $or: [
+            {
+              name: {
+                $regex: search,
+                $options: "i",
+              },
+            },
+            {
+              subject: {
+                $regex: search,
+                $options: "i",
+              },
+            },
+          ],
+        });
+      } else {
+        cursor = usersCollection.find({});
+      }
+
       const tutors = await cursor.toArray();
       res.send(tutors);
     });
