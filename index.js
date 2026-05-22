@@ -65,10 +65,10 @@ async function run() {
       if (startDate || endDate) {
         query.sessionStartDate = {};
         if (startDate) {
-          query.sessionStartDate.$gte = startDate; // e.g., "2026-05-01"
+          query.sessionStartDate.$gte = startDate; 
         }
         if (endDate) {
-          query.sessionStartDate.$lte = endDate; // e.g., "2026-07-31"
+          query.sessionStartDate.$lte = endDate;
         }
       }
 
@@ -225,8 +225,7 @@ async function run() {
       "Pinged your deployment. You successfully connected to MongoDB!",
     );
   } finally {
-    // Ensures that the client will close when you finish/error
-    // await client.close();
+    
   }
 }
 run().catch(console.dir);
